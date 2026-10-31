@@ -6,19 +6,21 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
-  test('upgrading a v1 database adds page columns and keeps books', () async {
-    final tmp = await Directory.systemTemp.createTemp('hearth_migrate');
-    addTearDown(() => tmp.delete(recursive: true));
-    final path = p.join(tmp.path, 'library.db');
+  test(
+    'upgrading a v1 database adds page columns, finish dates and the log',
+    () async {
+      final tmp = await Directory.systemTemp.createTemp('hearth_migrate');
+      addTearDown(() => tmp.delete(recursive: true));
+      final path = p.join(tmp.path, 'library.db');
 
-    // Schema as shipped in version 1 (no current_page / total_pages).
-    sqfliteFfiInit();
-    final v1 = await databaseFactoryFfi.openDatabase(
-      path,
-      options: OpenDatabaseOptions(
-        version: 1,
-        onCreate: (db, _) async {
-          await db.execute('''
+      // Schema as shipped in version 1 (no current_page / total_pages).
+      sqfliteFfiInit();
+      final v1 = await databaseFactoryFfi.openDatabase(
+        path,
+        options: OpenDatabaseOptions(
+          version: 1,
+          onCreate: (db, _) async {
+            await db.execute('''
             CREATE TABLE books (
               id TEXT PRIMARY KEY, title TEXT NOT NULL, author TEXT NOT NULL,
               format TEXT NOT NULL, file_path TEXT NOT NULL,
@@ -27,32 +29,54 @@ void main() {
               last_opened_at INTEGER, progress REAL NOT NULL DEFAULT 0,
               position TEXT
             )''');
-          await db.insert('books', {
-            'id': 'b1',
-            'title': 'Old Book',
-            'author': 'Someone',
-            'format': 'pdf',
-            'file_path': '/old.pdf',
-            'file_hash': 'h1',
-            'status': 'reading',
-            'added_at': 0,
-            'progress': 0.3,
-          });
-        },
-      ),
-    );
-    await v1.close();
+            await db.insert('books', {
+              'id': 'b1',
+              'title': 'Old Book',
+              'author': 'Someone',
+              'format': 'pdf',
+              'file_path': '/old.pdf',
+              'file_hash': 'h1',
+              'status': 'reading',
+              'added_at': 0,
+              'progress': 0.3,
+            });
+            await db.insert('books', {
+              'id': 'b2',
+              'title': 'Done Book',
+              'author': 'Someone',
+              'format': 'epub',
+              'file_path': '/done.epub',
+              'file_hash': 'h2',
+              'status': 'read',
+              'added_at': 1000,
+              'last_opened_at': 5000,
+              'progress': 1.0,
+            });
+          },
+        ),
+      );
+      await v1.close();
 
-    final db = await LibraryDatabase.open(path);
-    addTearDown(db.close);
-    final book = (await db.bookById('b1'))!;
-    expect(book.title, 'Old Book');
-    expect((book.currentPage, book.totalPages), (0, 0));
-    // No page data yet, so the badge falls back to the stored progress.
-    expect(book.completionPercent, 30);
+      final db = await LibraryDatabase.open(path);
+      addTearDown(db.close);
+      final book = (await db.bookById('b1'))!;
+      expect(book.title, 'Old Book');
+      expect((book.currentPage, book.totalPages), (0, 0));
+      // No page data yet, so the badge falls back to the stored progress.
+      expect(book.completionPercent, 30);
 
-    await db.updateBook(book.copyWith(currentPage: 5, totalPages: 50));
-    final updated = (await db.bookById('b1'))!;
-    expect(updated.completionPercent, 10);
-  });
+      await db.updateBook(book.copyWith(currentPage: 5, totalPages: 50));
+      final updated = (await db.bookById('b1'))!;
+      expect(updated.completionPercent, 10);
+
+      // v3: finished books get a best-guess finish date, and the log works.
+      final done = (await db.bookById('b2'))!;
+      expect(done.finishedAt, DateTime.fromMillisecondsSinceEpoch(5000));
+      expect(book.finishedAt, isNull);
+      await db.logPages('b1', 4, DateTime(2026, 3, 2));
+      await db.logPages('b1', 3, DateTime(2026, 3, 2));
+      final log = await db.readingLog(DateTime(2026, 3), DateTime(2026, 4));
+      expect(log.single.pages, 7);
+    },
+  );
 }

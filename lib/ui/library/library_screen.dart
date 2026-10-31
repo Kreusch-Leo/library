@@ -7,6 +7,7 @@ import '../../services/import_service.dart';
 import '../../services/library_controller.dart';
 import '../app_scope.dart';
 import '../reader/open_book.dart';
+import '../stats/stats_screen.dart';
 import '../theme.dart';
 import 'book_details_sheet.dart';
 import 'bookshelf.dart';
@@ -296,6 +297,13 @@ class _Header extends StatelessWidget {
             tooltip: searching ? 'Close search' : 'Search',
             icon: Icon(searching ? Icons.close : Icons.search),
             onPressed: onToggleSearch,
+          ),
+          IconButton(
+            tooltip: 'Reading stats',
+            icon: const Icon(Icons.insights_outlined),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const StatsScreen()),
+            ),
           ),
           PopupMenuButton<LibrarySort>(
             tooltip: 'Sort',

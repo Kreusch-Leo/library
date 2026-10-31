@@ -78,6 +78,7 @@ class Book {
     this.position,
     this.currentPage = 0,
     this.totalPages = 0,
+    this.finishedAt,
   });
 
   final String id;
@@ -100,6 +101,9 @@ class Book {
   final int currentPage;
   final int totalPages;
 
+  /// When the book was marked as read; null while unread.
+  final DateTime? finishedAt;
+
   /// Reading completion, 0..1. Uses page counts when known and falls back
   /// to [progress] (e.g. for EPUBs, which have no fixed pages).
   double get completion => totalPages > 0
@@ -119,6 +123,8 @@ class Book {
     ReadingPosition? position,
     int? currentPage,
     int? totalPages,
+    DateTime? finishedAt,
+    bool clearFinishedAt = false,
   }) => Book(
     id: id,
     title: title ?? this.title,
@@ -134,6 +140,7 @@ class Book {
     position: position ?? this.position,
     currentPage: currentPage ?? this.currentPage,
     totalPages: totalPages ?? this.totalPages,
+    finishedAt: clearFinishedAt ? null : (finishedAt ?? this.finishedAt),
   );
 
   Map<String, Object?> toRow() => {
@@ -151,6 +158,7 @@ class Book {
     'position': position?.encode(),
     'current_page': currentPage,
     'total_pages': totalPages,
+    'finished_at': finishedAt?.millisecondsSinceEpoch,
   };
 
   static Book fromRow(Map<String, Object?> row) => Book(
@@ -170,6 +178,9 @@ class Book {
     position: ReadingPosition.decode(row['position'] as String?),
     currentPage: row['current_page'] as int? ?? 0,
     totalPages: row['total_pages'] as int? ?? 0,
+    finishedAt: row['finished_at'] == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(row['finished_at']! as int),
   );
 }
 
@@ -305,4 +316,32 @@ class Annotation {
     createdAt: DateTime.fromMillisecondsSinceEpoch(row['created_at']! as int),
     updatedAt: DateTime.fromMillisecondsSinceEpoch(row['updated_at']! as int),
   );
+}
+
+/// Pages read in one book on one calendar day.
+class ReadingLogEntry {
+  const ReadingLogEntry({
+    required this.day,
+    required this.bookId,
+    required this.pages,
+  });
+
+  /// Local midnight of the day.
+  final DateTime day;
+  final String bookId;
+  final int pages;
+
+  static String dayKey(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-'
+      '${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
+
+  static ReadingLogEntry fromRow(Map<String, Object?> row) {
+    final parts = (row['day']! as String).split('-').map(int.parse).toList();
+    return ReadingLogEntry(
+      day: DateTime(parts[0], parts[1], parts[2]),
+      bookId: row['book_id']! as String,
+      pages: row['pages']! as int,
+    );
+  }
 }

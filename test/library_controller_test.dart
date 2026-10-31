@@ -104,6 +104,42 @@ void main() {
     expect(library.bookById(book.id)!.totalPages, 100);
   });
 
+  test('forward page turns are logged for stats; jumps are not', () async {
+    await library.importFiles([await writeEpub('a.epub')]);
+    var book = library.books.single;
+    Future<void> at(int page) => library.savePosition(
+      library.bookById(book.id)!,
+      ReadingPosition.pdf(page),
+      page / 200,
+      currentPage: page,
+      totalPages: 200,
+    );
+    await at(3); // first save of an unopened book counts from page 0
+    await at(5);
+    await at(4); // going back: not reading
+    await at(80); // jump via contents: not reading
+    await at(82);
+
+    final today = DateTime.now();
+    final log = await library.readingLog(
+      DateTime(today.year, today.month, today.day),
+      DateTime(today.year, today.month, today.day + 1),
+    );
+    expect(log.single.pages, 3 + 2 + 2);
+  });
+
+  test('finishing a book records when; un-finishing clears it', () async {
+    await library.importFiles([await writeEpub('a.epub')]);
+    final book = library.books.single;
+    await library.setStatus(book, ReadingStatus.read);
+    final finished = library.bookById(book.id)!.finishedAt;
+    expect(finished, isNotNull);
+    await library.setStatus(book, ReadingStatus.read);
+    expect(library.bookById(book.id)!.finishedAt, finished);
+    await library.setStatus(book, ReadingStatus.reading);
+    expect((await db.bookById(book.id))!.finishedAt, isNull);
+  });
+
   test('read books keep full progress', () async {
     await library.importFiles([await writeEpub('a.epub')]);
     final book = library.books.single;

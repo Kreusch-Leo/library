@@ -14,7 +14,7 @@ class LibraryDatabase {
 
   final Database _db;
 
-  static const _schemaVersion = 2;
+  static const _schemaVersion = 3;
 
   static Future<LibraryDatabase> open(String path) async {
     final factory = _factory();
@@ -70,9 +70,11 @@ class LibraryDatabase {
         progress REAL NOT NULL DEFAULT 0,
         position TEXT,
         current_page INTEGER NOT NULL DEFAULT 0,
-        total_pages INTEGER NOT NULL DEFAULT 0
+        total_pages INTEGER NOT NULL DEFAULT 0,
+        finished_at INTEGER
       )
     ''');
+    await _createReadingLog(db);
     await db.execute('''
       CREATE TABLE annotations (
         id TEXT PRIMARY KEY,
@@ -104,6 +106,26 @@ class LibraryDatabase {
         'ALTER TABLE books ADD COLUMN total_pages INTEGER NOT NULL DEFAULT 0',
       );
     }
+    if (oldVersion < 3) {
+      await db.execute('ALTER TABLE books ADD COLUMN finished_at INTEGER');
+      // Best guess for books finished before this was tracked.
+      await db.execute(
+        "UPDATE books SET finished_at = "
+        "COALESCE(last_opened_at, added_at) WHERE status = 'read'",
+      );
+      await _createReadingLog(db);
+    }
+  }
+
+  static Future<void> _createReadingLog(Database db) async {
+    await db.execute('''
+      CREATE TABLE reading_log (
+        day TEXT NOT NULL,
+        book_id TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+        pages INTEGER NOT NULL,
+        PRIMARY KEY (day, book_id)
+      )
+    ''');
   }
 
   Future<void> close() => _db.close();
@@ -136,6 +158,30 @@ class LibraryDatabase {
 
   Future<void> deleteBook(String id) =>
       _db.delete('books', where: 'id = ?', whereArgs: [id]);
+
+  // ---- reading log ---------------------------------------------------------
+
+  /// Adds [pages] to the tally for [bookId] on the day of [when].
+  Future<void> logPages(
+    String bookId,
+    int pages,
+    DateTime when,
+  ) => _db.rawInsert(
+    'INSERT INTO reading_log (day, book_id, pages) VALUES (?, ?, ?) '
+    'ON CONFLICT(day, book_id) DO UPDATE SET pages = pages + excluded.pages',
+    [ReadingLogEntry.dayKey(when), bookId, pages],
+  );
+
+  /// Log entries for days in [from, to) (local dates).
+  Future<List<ReadingLogEntry>> readingLog(DateTime from, DateTime to) async {
+    final rows = await _db.query(
+      'reading_log',
+      where: 'day >= ? AND day < ?',
+      whereArgs: [ReadingLogEntry.dayKey(from), ReadingLogEntry.dayKey(to)],
+      orderBy: 'day ASC',
+    );
+    return rows.map(ReadingLogEntry.fromRow).toList();
+  }
 
   // ---- annotations ---------------------------------------------------------
 

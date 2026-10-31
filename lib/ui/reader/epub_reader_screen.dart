@@ -210,8 +210,14 @@ class _EpubReaderScreenState extends State<EpubReaderScreen> {
       widget.book,
       ReadingPosition.epub(_chapter, fraction),
       _overallProgress(fraction),
+      currentPage: (_overallProgress(fraction) * _estimatedPages).round(),
+      totalPages: _estimatedPages,
     );
   }
+
+  /// EPUBs have no fixed pages: estimate one printed page per ~2 KB of
+  /// chapter XHTML, so stats and the shelf badge can count "pages".
+  int get _estimatedPages => (_cumulative.last / 2000).ceil().clamp(1, 100000);
 
   void _goToChapter(int index) {
     final doc = _doc;

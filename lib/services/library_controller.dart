@@ -175,9 +175,13 @@ class LibraryController extends ChangeNotifier {
 
   Future<void> setStatus(Book book, ReadingStatus status) async {
     final current = bookById(book.id) ?? book;
+    final finishing =
+        status == ReadingStatus.read && current.status != ReadingStatus.read;
     await _replace(
       current.copyWith(
         status: status,
+        finishedAt: finishing ? DateTime.now() : null,
+        clearFinishedAt: status != ReadingStatus.read,
         progress: status == ReadingStatus.read ? 1.0 : null,
       ),
     );
@@ -197,6 +201,22 @@ class LibraryController extends ChangeNotifier {
     );
   }
 
+  /// The page the stats should count from, or null when unknown (an EPUB
+  /// opened before page counts were stored).
+  static int? _previousPage(Book book) {
+    if (book.totalPages > 0) return book.currentPage;
+    if (book.position?.page case final page?) return page;
+    if (book.position == null) return book.format == BookFormat.pdf ? 1 : 0;
+    return null;
+  }
+
+  /// Largest forward move between two saves still counted as reading.
+  static const maxPagesPerSave = 20;
+
+  /// Reading log for [from, to), for the stats dashboard.
+  Future<List<ReadingLogEntry>> readingLog(DateTime from, DateTime to) =>
+      db.readingLog(from, to);
+
   Future<void> markOpened(Book book) async {
     final current = bookById(book.id) ?? book;
     await _replace(current.copyWith(lastOpenedAt: DateTime.now()));
@@ -212,6 +232,15 @@ class LibraryController extends ChangeNotifier {
     int? totalPages,
   }) async {
     final current = bookById(book.id) ?? book;
+    // Count forward page turns towards the reading stats. Bigger leaps are
+    // jumps (contents, scrubber, notes), not reading.
+    final previous = _previousPage(current);
+    if (currentPage != null && previous != null) {
+      final delta = currentPage - previous;
+      if (delta > 0 && delta <= maxPagesPerSave) {
+        await db.logPages(current.id, delta, DateTime.now());
+      }
+    }
     final clamped = progress.clamp(0.0, 1.0);
     final status = current.status == ReadingStatus.tbr && clamped > 0.005
         ? ReadingStatus.reading
