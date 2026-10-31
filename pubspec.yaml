@@ -1,0 +1,57 @@
+name: hearth_reader
+description: "A new Flutter project."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.13.7
+
+dependencies:
+  archive: ^4.5.2
+  crypto: ^3.0.8
+  file_picker: ^13.3.0
+  flutter:
+    sdk: flutter
+  flutter_markdown_plus: ^1.0.12
+  flutter_widget_from_html_core: ^0.17.4
+  html: ^0.15.7
+  material_ui: ^1.9.0
+  path: ^1.9.1
+  path_provider: ^2.1.6
+  pdfrx: ^2.11.0
+  sqflite: ^2.4.5
+  sqflite_common_ffi: ^2.4.5
+  uuid: ^4.6.0
+  xml: ^7.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  fonts:
+    # Literata (SIL Open Font License, see assets/fonts/OFL.txt), designed
+    # for long-form reading on screens.
+    - family: Literata
+      fonts:
+        - asset: assets/fonts/Literata-Regular.ttf
+        - asset: assets/fonts/Literata-Italic.ttf
+          style: italic
+        - asset: assets/fonts/Literata-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Literata-SemiBoldItalic.ttf
+          weight: 600
+          style: italic
+        - asset: assets/fonts/Literata-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Literata-BoldItalic.ttf
+          weight: 700
+          style: italic
+
+  assets:
+    - assets/fonts/OFL.txt
